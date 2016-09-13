@@ -34,31 +34,52 @@ class Handler(webapp2.RequestHandler):
     def render(self, template, **kw):
         self.write(self.render_str(template, **kw))
 
-class Art(db.Model):
+class Posts(db.Model):
     title = db.StringProperty(required = True)
-    art = db.TextProperty(required = True)
+    body = db.TextProperty(required = True)
     created = db.DateTimeProperty(auto_now_add = True)
 
-class MainHandler(Handler):
-    def render_front(self, title="", art="", error=""):
-        arts = db.GqlQuery("SELECT * FROM Art ORDER BY created DESC")
-        self.render("mainblog.html", title = title, art = art, error = error, arts = arts)
+class MainBlog(Handler):
+    def render_front(self, posts = ""):
+        posts = db.GqlQuery("SELECT * FROM Posts ORDER BY created DESC LIMIT 5")
+        self.render("mainblog.html", posts = posts)
 
     def get(self):
         self.render_front()
 
+class PostHandler(Handler):
+    def render_newpost(self, title="", body="", error=""):
+        self.render("newpost.html", title = title, body = body, error = error)
+
+    def get(self):
+        self.render_newpost()
+
     def post(self):
         title = self.request.get("title")
-        art = self.request.get("art")
+        body = self.request.get("body")
 
-        if title and art:
-            a = Art(title = title, art = art)
+        if title and body:
+            a = Posts(title = title, body = body)
             a.put()
-            self.redirect("/")
+            self.redirect("/blog/{}".format(a.key().id()))
         else:
-            error = "we need both a title and some artwork!"
-            self.render_front(title, art, error)
+            error = "we need both a title and some text!"
+            self.render_newpost(title, body, error)
+
+class ViewPostHandler(Handler):
+    def get(self, id_num):
+        id_num_int = int(id_num)
+        post = Posts.get_by_id(id_num_int)
+
+        if not post:
+            error = "That is not a valid ID"
+            self.write(error)
+            return
+        else:
+            self.render("singlepost.html", post = post)
 
 app = webapp2.WSGIApplication([
-    ('/', MainHandler)
+    ('/blog', MainBlog),
+    ('/newpost', PostHandler),
+    webapp2.Route('/blog/<id_num:\d+>', ViewPostHandler)
 ], debug=True)
